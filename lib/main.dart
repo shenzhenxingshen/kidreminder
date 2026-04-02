@@ -742,93 +742,92 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildPlanTaskCard(ReminderItem item) {
     final hasTime = item.hasTime;
-    final timeText =
-        hasTime ? _formatTime(item.hour ?? 0, item.minute ?? 0) : '点击设置时间';
-    return Card(
+    final timeText = hasTime ? _formatTime(item.hour ?? 0, item.minute ?? 0) : null;
+    return Dismissible(
       key: ValueKey(item.id),
-      child: ListTile(
-        title: Text(item.title),
-        subtitle: Text('提醒时间：$timeText'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Switch(
-              value: item.enabled,
-              onChanged: (v) => _toggleItem(item, v),
-            ),
-            IconButton(
-              onPressed: () => _showEditDialog(item),
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: '编辑',
-            ),
-            IconButton(
-              onPressed: () => _deleteItem(item),
-              icon: const Icon(Icons.delete_outline),
-              tooltip: '删除',
-              color: Colors.red,
-            ),
-          ],
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
+        child: const Icon(Icons.delete, color: Colors.red),
+      ),
+      confirmDismiss: (_) => _showDeleteConfirmDialog(item.title),
+      onDismissed: (_) => _deleteItem(item),
+      child: Card(
+        shape: hasTime
+            ? null
+            : RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade300, style: BorderStyle.solid, width: 1),
+              ),
+        child: ListTile(
+          leading: hasTime
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(timeText!, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 15)),
+                )
+              : const Icon(Icons.access_time, color: Colors.grey),
+          title: Text(item.title),
+          subtitle: hasTime ? null : const Text('点击设置提醒时间', style: TextStyle(color: Colors.orange)),
+          trailing: Switch(value: item.enabled, onChanged: (v) => _toggleItem(item, v)),
+          onTap: () => _pickTaskTime(item),
         ),
-        onTap: () => _pickTaskTime(item),
       ),
     );
   }
 
   Widget _buildPlanTab() {
     final tasks = _settings.taskItems;
-    
-    if (tasks.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            '计划设置',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          const Text('在录音页新建"该吃饭了"等任务后，可在这里设置时间'),
-          const SizedBox(height: 12),
-          const Card(
-            child: ListTile(
-              title: Text('暂无任务提醒，请先在录音页新建'),
-            ),
-          ),
-        ],
-      );
-    }
+    final withTime = tasks.where((t) => t.hasTime).length;
 
     return Column(
       children: [
-        Expanded(
-          child: Column(
+        // 统计条
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Text(
-                      '计划设置（长按拖拽排序）',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text('在录音页新建"该吃饭了"等任务后，可在这里设置时间'),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ReorderableListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: tasks.length,
-                  onReorder: (oldIndex, newIndex) => _reorderPlanTasks(oldIndex, newIndex),
-                  itemBuilder: (context, index) {
-                    return _buildPlanTaskCard(tasks[index]);
-                  },
-                ),
-              ),
+              const Icon(Icons.schedule, size: 20, color: Colors.teal),
+              const SizedBox(width: 8),
+              Text('计划设置', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const Spacer(),
+              if (tasks.isNotEmpty)
+                Text('${tasks.length} 个任务 · $withTime 个已设时间',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
             ],
           ),
         ),
+        if (tasks.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.event_note, size: 64, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  const Text('暂无任务提醒', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => setState(() => _tabIndex = 2),
+                    icon: const Icon(Icons.add),
+                    label: const Text('去录音页新建'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ReorderableListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: tasks.length,
+              onReorder: (oldIndex, newIndex) => _reorderPlanTasks(oldIndex, newIndex),
+              itemBuilder: (context, index) => _buildPlanTaskCard(tasks[index]),
+            ),
+          ),
       ],
     );
   }
@@ -853,134 +852,224 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildRecordItemCard(ReminderItem item) {
     final recordingThis = _isRecording && _recordingItemId == item.id;
-    final typeText = item.type == ReminderItemType.task ? '任务提醒' : '行为提醒';
-    final hasTime = item.hasTime
-        ? _formatTime(item.hour ?? 0, item.minute ?? 0)
-        : '未设置时间';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(item.title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 6),
-            Text('$typeText · $hasTime'),
-            const SizedBox(height: 6),
-            Text(item.audioPath == null ? '未录制' : '已录制'),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                FilledButton(
-                  onPressed:
-                      _isRecording ? null : () => _startRecordingForItem(item.id),
-                  child: const Text('开始录音'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: recordingThis ? _stopRecording : null,
-                  child: const Text('停止'),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: () => _playIfExists(item.audioPath, '还没有录音'),
-                  child: const Text('播放'),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => _showEditDialog(item),
-                  icon: const Icon(Icons.edit),
-                  tooltip: '编辑',
-                ),
-                IconButton(
-                  onPressed: () => _deleteItem(item),
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  tooltip: '删除',
-                ),
-              ],
-            ),
-          ],
+    final typeLabel = item.type == ReminderItemType.task ? '任务' : '行为';
+    final typeColor = item.type == ReminderItemType.task ? Colors.teal : Colors.orange;
+    final hasAudio = item.audioPath != null && item.audioPath!.isNotEmpty;
+
+    return Dismissible(
+      key: ValueKey(item.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
+        child: const Icon(Icons.delete, color: Colors.red),
+      ),
+      confirmDismiss: (_) => _showDeleteConfirmDialog(item.title),
+      onDismissed: (_) => _deleteItem(item),
+      child: Card(
+        shape: recordingThis
+            ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Colors.red, width: 2))
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // 类型标签
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                    child: Text(typeLabel, style: TextStyle(fontSize: 12, color: typeColor, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(item.title, style: Theme.of(context).textTheme.titleMedium)),
+                  // 录音状态
+                  Icon(
+                    hasAudio ? Icons.check_circle : Icons.circle_outlined,
+                    size: 20,
+                    color: hasAudio ? Colors.green : Colors.grey,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // 操作按钮行
+              Row(
+                children: [
+                  if (recordingThis)
+                    FilledButton.icon(
+                      onPressed: _stopRecording,
+                      icon: const Icon(Icons.stop, size: 18),
+                      label: const Text('停止录音'),
+                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: _isRecording ? null : () => _startRecordingForItem(item.id),
+                      icon: const Icon(Icons.mic, size: 18),
+                      label: Text(hasAudio ? '重新录音' : '录音'),
+                    ),
+                  const SizedBox(width: 8),
+                  if (hasAudio)
+                    OutlinedButton.icon(
+                      onPressed: () => _playIfExists(item.audioPath, '还没有录音'),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('播放'),
+                    ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => _showEditDialog(item),
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: '编辑',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  bool _showNewItemForm = false;
+
   Widget _buildRecordTab() {
     final recordingPraise = _isRecording && _recordingPraise;
+    final hasPraise = _settings.praiseAudioPath != null && _settings.praiseAudioPath!.isNotEmpty;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          '录音中心',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 12),
+        // === 鼓励语音（醒目卡片） ===
         Card(
+          color: Colors.amber.withOpacity(0.08),
           child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.amber.withOpacity(0.15), shape: BoxShape.circle),
+                  child: const Icon(Icons.emoji_events, color: Colors.amber, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('鼓励语音', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 4),
+                      Text(hasPraise ? '已录制 ✓' : '录一段鼓励的话，完成任务时播放', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                if (recordingPraise)
+                  FilledButton(onPressed: _stopRecording, style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('停止'))
+                else ...[
+                  IconButton(onPressed: _isRecording ? null : _startRecordingForPraise, icon: const Icon(Icons.mic), tooltip: '录音'),
+                  if (hasPraise)
+                    IconButton(onPressed: () => _playIfExists(_settings.praiseAudioPath, '还没有鼓励语音'), icon: const Icon(Icons.play_arrow), tooltip: '播放'),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // === 新建区域 ===
+        Row(
+          children: [
+            const Icon(Icons.mic, size: 20, color: Colors.teal),
+            const SizedBox(width: 8),
+            Text('提醒列表', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const Spacer(),
+            FilledButton.tonalIcon(
+              onPressed: () => setState(() => _showNewItemForm = !_showNewItemForm),
+              icon: Icon(_showNewItemForm ? Icons.close : Icons.add),
+              label: Text(_showNewItemForm ? '收起' : '新建'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        if (_showNewItemForm) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
                 TextField(
                   controller: _newTitleController,
                   decoration: const InputDecoration(
-                    labelText: '提醒名称（如：该吃饭了、好好说话）',
+                    labelText: '提醒名称',
+                    hintText: '如：该吃饭了、好好说话',
+                    prefixIcon: Icon(Icons.label_outline),
                   ),
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<ReminderItemType>(
-                  initialValue: _newItemType,
-                  items: const [
-                    DropdownMenuItem(
-                      value: ReminderItemType.task,
-                      child: Text('任务提醒（可进计划）'),
-                    ),
-                    DropdownMenuItem(
-                      value: ReminderItemType.behavior,
-                      child: Text('行为提醒（快捷触发）'),
-                    ),
+                SegmentedButton<ReminderItemType>(
+                  segments: const [
+                    ButtonSegment(value: ReminderItemType.task, label: Text('任务提醒'), icon: Icon(Icons.schedule)),
+                    ButtonSegment(value: ReminderItemType.behavior, label: Text('行为提醒'), icon: Icon(Icons.psychology)),
                   ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _newItemType = v;
-                    });
-                  },
+                  selected: {_newItemType},
+                  onSelectionChanged: (s) => setState(() => _newItemType = s.first),
                 ),
                 const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: _isRecording ? null : _createAndRecord,
-                  child: const Text('新建并开始录音'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _isRecording ? null : () async {
+                          final item = await _createNewItem();
+                          if (item != null) setState(() => _showNewItemForm = false);
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('仅创建'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isRecording ? null : () async {
+                          await _createAndRecord();
+                          setState(() => _showNewItemForm = false);
+                        },
+                        icon: const Icon(Icons.mic),
+                        label: const Text('创建并录音'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        ..._settings.items.map(_buildRecordItemCard),
-        Card(
-          child: ListTile(
-            title: const Text('鼓励语音'),
-            subtitle: Text(_settings.praiseAudioPath == null ? '未录制' : '已录制'),
-            trailing: Wrap(
-              spacing: 8,
-              children: [
-                TextButton(
-                  onPressed: _isRecording ? null : _startRecordingForPraise,
-                  child: const Text('录音'),
-                ),
-                TextButton(
-                  onPressed: recordingPraise ? _stopRecording : null,
-                  child: const Text('停止'),
-                ),
-                TextButton(
-                  onPressed: () =>
-                      _playIfExists(_settings.praiseAudioPath, '还没有鼓励语音'),
-                  child: const Text('播放'),
-                ),
-              ],
+          const SizedBox(height: 8),
+        ],
+
+        // === 已有提醒列表 ===
+        if (_settings.items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 32),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.mic_none, size: 64, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  const Text('还没有提醒项', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  const Text('点击上方"新建"开始', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
             ),
-          ),
-        ),
+          )
+        else
+          ..._settings.items.map(_buildRecordItemCard),
       ],
     );
   }
