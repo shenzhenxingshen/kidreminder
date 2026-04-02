@@ -18,9 +18,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
-    // 默认选中前 4 个
-    for (var i = 0; i < 4 && i < widget.templates.length; i++) {
-      _selected.add(widget.templates[i].id);
+    // 默认选中前 4 个任务 + 所有行为提醒
+    int taskCount = 0;
+    for (final t in widget.templates) {
+      if (t.isBehavior) {
+        _selected.add(t.id);
+      } else if (taskCount < 4) {
+        _selected.add(t.id);
+        taskCount++;
+      }
     }
   }
 
