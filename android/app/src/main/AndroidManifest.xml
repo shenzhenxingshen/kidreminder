@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
-        android:label="kidreminder"
+        android:label="小小提醒官"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
