@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.kidreminder"
+    namespace = "com.xingshen.kidreminder"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.1.12297006"
 
@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.kidreminder"
+        applicationId = "com.xingshen.kidreminder"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

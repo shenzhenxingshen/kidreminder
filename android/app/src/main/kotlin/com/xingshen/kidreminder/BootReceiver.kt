@@ -1,4 +1,4 @@
-package com.example.kidreminder
+package com.xingshen.kidreminder
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -23,7 +23,7 @@ class BootReceiver : BroadcastReceiver() {
                     // 调用 Flutter 端的恢复方法
                     val channel = MethodChannel(
                         flutterEngine.dartExecutor.binaryMessenger,
-                        "com.example.kidreminder/boot"
+                        "com.xingshen.kidreminder/boot"
                     )
                     
                     channel.invokeMethod("rescheduleNotifications", null, object : MethodChannel.Result {
