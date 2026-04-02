@@ -571,37 +571,33 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTimelineCard(ReminderItem item) {
     final hour = item.hour ?? 20;
     final minute = item.minute ?? 0;
-    return Card(
+    return Dismissible(
       key: ValueKey(item.id),
-      child: ListTile(
-        title: Text(item.title),
-        subtitle: Text(
-          '提前提醒：${_preTime(hour, minute)}\n到点提醒：${_formatTime(hour, minute)}',
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
+        child: const Icon(Icons.delete, color: Colors.red),
+      ),
+      confirmDismiss: (_) => _showDeleteConfirmDialog(item.title),
+      onDismissed: (_) => _deleteItem(item),
+      child: Card(
+        child: ListTile(
+          leading: Icon(
+            item.enabled ? Icons.notifications_active : Icons.notifications_off,
+            color: item.enabled ? Colors.teal : Colors.grey,
+          ),
+          title: Text(item.title),
+          subtitle: Text('${_preTime(hour, minute)} 预提醒 · ${_formatTime(hour, minute)} 正式提醒'),
+          trailing: IconButton(
+            onPressed: () => _showEditDialog(item),
+            icon: const Icon(Icons.more_vert),
+            tooltip: '编辑',
+          ),
+          onTap: () => _pickTaskTime(item),
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 通知开关
-            Icon(
-              item.enabled ? Icons.notifications_active : Icons.notifications_off,
-              color: item.enabled ? Colors.teal : Colors.grey,
-            ),
-            // 编辑按钮
-            IconButton(
-              onPressed: () => _showEditDialog(item),
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: '编辑',
-            ),
-            // 删除按钮
-            IconButton(
-              onPressed: () => _deleteItem(item),
-              icon: const Icon(Icons.delete_outline),
-              tooltip: '删除',
-              color: Colors.red,
-            ),
-          ],
-        ),
-        onTap: () => _pickTaskTime(item),
       ),
     );
   }
@@ -612,108 +608,112 @@ class _HomeScreenState extends State<HomeScreen> {
         _settings.behaviorItems.where((e) => e.enabled).toList()
           ..sort((a, b) => a.title.compareTo(b.title));
 
-    if (tasks.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            '今日时间线',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 12),
-          const Card(
-            child: ListTile(
-              title: Text('暂无计划任务，请去录音页新建任务并在计划页设置时间'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _onDonePressed,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-            child: const Text('我做到了'),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '行为提醒',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: behaviorItems
-                .map(
-                  (item) => ElevatedButton(
-                    onPressed: () => _playIfExists(item.audioPath, item.title),
-                    child: Text(item.title),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      );
-    }
-
     return Column(
       children: [
         Expanded(
-          child: Column(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
+              // === 今日时间线 ===
+              Row(
+                children: [
+                  const Icon(Icons.timeline, size: 20, color: Colors.teal),
+                  const SizedBox(width: 8),
+                  Text('今日时间线', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (tasks.isEmpty)
+                Card(
+                  color: Colors.teal.withOpacity(0.05),
+                  child: const ListTile(
+                    leading: Icon(Icons.info_outline, color: Colors.teal),
+                    title: Text('暂无计划任务'),
+                    subtitle: Text('请去录音页新建任务，再到计划页设置时间'),
+                  ),
+                )
+              else
+                ...tasks.map(_buildTimelineCard),
+
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 12),
+
+              // === 行为提醒 ===
+              Row(
+                children: [
+                  const Icon(Icons.psychology, size: 20, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Text('行为提醒', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (behaviorItems.isEmpty)
+                Card(
+                  color: Colors.orange.withOpacity(0.05),
+                  child: const ListTile(
+                    leading: Icon(Icons.info_outline, color: Colors.orange),
+                    title: Text('暂无行为提醒'),
+                    subtitle: Text('在录音页新建"好好说话"等行为提醒'),
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: behaviorItems.map((item) => ActionChip(
+                    avatar: const Icon(Icons.volume_up, size: 18),
+                    label: Text(item.title),
+                    onPressed: () => _playIfExists(item.audioPath, item.title),
+                  )).toList(),
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+
+        // === 底部固定：我做到了 ===
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, -2))],
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Row(
+            children: [
+              // 今日完成次数
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    const Icon(Icons.star, color: Colors.amber, size: 20),
+                    const SizedBox(width: 4),
                     Text(
-                      '今日时间线（长按拖拽排序）',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      '今日 ${_settings.completedCountToday} 次',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
+              // 我做到了按钮
               Expanded(
-                child: ReorderableListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: tasks.length,
-                  onReorder: (oldIndex, newIndex) => _reorderTasks(oldIndex, newIndex),
-                  itemBuilder: (context, index) {
-                    return _buildTimelineCard(tasks[index]);
-                  },
+                child: FilledButton.icon(
+                  onPressed: _onDonePressed,
+                  icon: const Icon(Icons.emoji_events),
+                  label: const Text('我做到了！', style: TextStyle(fontSize: 16)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    backgroundColor: Colors.teal,
+                  ),
                 ),
               ),
             ],
-          ),
-        ),
-        Container(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                FilledButton(
-                  onPressed: _onDonePressed,
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-                  child: const Text('我做到了'),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '行为提醒',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: behaviorItems
-                      .map(
-                        (item) => ElevatedButton(
-                          onPressed: () => _playIfExists(item.audioPath, item.title),
-                          child: Text(item.title),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ),
           ),
         ),
       ],
@@ -1022,6 +1022,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('小小提醒官'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Chip(
+              avatar: const Icon(Icons.star, color: Colors.amber, size: 18),
+              label: Text('${_settings.completedCountToday}次'),
+              backgroundColor: Colors.teal.withOpacity(0.1),
+            ),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
