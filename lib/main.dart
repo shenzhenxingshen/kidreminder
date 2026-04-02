@@ -9,6 +9,8 @@ import 'package:kidreminder/models/app_models.dart';
 import 'package:kidreminder/services/audio_service.dart';
 import 'package:kidreminder/services/notification_service.dart';
 import 'package:kidreminder/services/storage_service.dart';
+import 'package:kidreminder/screens/onboarding_screen.dart';
+import 'package:kidreminder/widgets/celebration_overlay.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -420,16 +422,59 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _onDonePressed() async {
+    final today = _todayKey();
+    final newCount = _settings.completedCountToday + 1;
+    final newWeekly = Map<String, int>.from(_settings.weeklyData);
+    newWeekly[today] = newCount;
+
+    // 检查成就
+    var achievements = List<Achievement>.from(_settings.achievements);
+    achievements = _checkAchievements(achievements, newCount, newWeekly);
+
     final next = _normalizeDailyCount(_settings).copyWith(
-      completedDate: _todayKey(),
-      completedCountToday: _settings.completedCountToday + 1,
+      completedDate: today,
+      completedCountToday: newCount,
+      weeklyData: newWeekly,
+      achievements: achievements,
     );
     await _saveSettings(next);
-    await _playIfExists(next.praiseAudioPath, '还没有鼓励语音');
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('太棒了，已记录一次完成')),
-    );
+
+    // 显示庆祝动画
+    setState(() => _showCelebration = true);
+    await _playIfExists(next.praiseAudioPath, '太棒了，已记录一次完成');
+  }
+
+  List<Achievement> _checkAchievements(List<Achievement> achievements, int todayCount, Map<String, int> weekly) {
+    final today = _todayKey();
+    final totalAll = weekly.values.fold(0, (a, b) => a + b);
+
+    // 计算连续天数
+    int streak = 0;
+    var d = DateTime.now();
+    while (true) {
+      final key = AppSettings.buildDateKey(d);
+      if ((weekly[key] ?? 0) > 0) {
+        streak++;
+        d = d.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+
+    final taskCount = _settings.taskItems.where((t) => t.enabled && t.hasTime).length;
+
+    return achievements.map((a) {
+      if (a.isUnlocked) return a;
+      switch (a.id) {
+        case 'first_done': return totalAll >= 1 ? a.unlock(today) : a;
+        case 'streak_3': return streak >= 3 ? a.unlock(today) : a;
+        case 'streak_7': return streak >= 7 ? a.unlock(today) : a;
+        case 'total_10': return totalAll >= 10 ? a.unlock(today) : a;
+        case 'total_50': return totalAll >= 50 ? a.unlock(today) : a;
+        case 'all_tasks': return taskCount > 0 && todayCount >= taskCount ? a.unlock(today) : a;
+        default: return a;
+      }
+    }).toList();
   }
 
   Future<void> _createAndRecord() async {
@@ -935,6 +980,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   bool _showNewItemForm = false;
+  bool _showCelebration = false;
 
   Widget _buildRecordTab() {
     final recordingPraise = _isRecording && _recordingPraise;
@@ -1075,32 +1121,199 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildParentTab() {
+    final weekly = _settings.weeklyData;
+    final achievements = _settings.achievements;
+    final unlocked = achievements.where((a) => a.isUnlocked).toList();
+
+    // 最近 7 天数据
+    final days = <MapEntry<String, int>>[];
+    for (var i = 6; i >= 0; i--) {
+      final d = DateTime.now().subtract(Duration(days: i));
+      final key = AppSettings.buildDateKey(d);
+      days.add(MapEntry('${d.month}/${d.day}', weekly[key] ?? 0));
+    }
+    final maxCount = days.map((e) => e.value).fold(1, (a, b) => a > b ? a : b);
+    final weekTotal = days.map((e) => e.value).fold(0, (a, b) => a + b);
+    final activeDays = days.where((e) => e.value > 0).length;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          '家长页',
-          style: Theme.of(context).textTheme.headlineSmall,
+        // 周统计概览
+        Row(
+          children: [
+            const Icon(Icons.bar_chart, size: 20, color: Colors.teal),
+            const SizedBox(width: 8),
+            Text('本周统计', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          ],
         ),
         const SizedBox(height: 12),
         Card(
-          child: ListTile(
-            title: const Text('今天完成次数'),
-            subtitle: Text('${_settings.completedCountToday} 次'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _statBadge('$weekTotal', '本周完成'),
+                    _statBadge('$activeDays', '活跃天数'),
+                    _statBadge('${_settings.completedCountToday}', '今日完成'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // 柱状图
+                SizedBox(
+                  height: 100,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: days.map((e) => Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (e.value > 0) Text('${e.value}', style: const TextStyle(fontSize: 11, color: Colors.teal)),
+                            const SizedBox(height: 2),
+                            Container(
+                              height: e.value > 0 ? (e.value / maxCount * 60).clamp(8, 60) : 4,
+                              decoration: BoxDecoration(
+                                color: e.value > 0 ? Colors.teal : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(e.key, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const Card(
-          child: ListTile(
-            title: Text('建议'),
-            subtitle: Text('先在录音页新建提醒，再去计划页设置任务时间。'),
-          ),
+
+        const SizedBox(height: 20),
+
+        // 成就系统
+        Row(
+          children: [
+            const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
+            const SizedBox(width: 8),
+            Text('成就徽章', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const Spacer(),
+            Text('${unlocked.length}/${achievements.length}', style: TextStyle(color: Colors.grey.shade600)),
+          ],
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: achievements.map((a) => Card(
+            color: a.isUnlocked ? Colors.amber.withOpacity(0.08) : Colors.grey.withOpacity(0.05),
+            child: SizedBox(
+              width: (MediaQuery.of(context).size.width - 48) / 3,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    Text(a.icon, style: TextStyle(fontSize: 28, color: a.isUnlocked ? null : Colors.grey.shade400)),
+                    const SizedBox(height: 4),
+                    Text(a.title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: a.isUnlocked ? Colors.amber.shade800 : Colors.grey)),
+                    const SizedBox(height: 2),
+                    Text(a.requirement, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), textAlign: TextAlign.center),
+                  ],
+                ),
+              ),
+            ),
+          )).toList(),
+        ),
+
+        const SizedBox(height: 20),
+
+        // 电池优化引导
+        if (Platform.isAndroid) ...[
+          Row(
+            children: [
+              const Icon(Icons.battery_alert, size: 20, color: Colors.orange),
+              const SizedBox(width: 8),
+              Text('通知保障', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Card(
+            color: Colors.orange.withOpacity(0.05),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('如果提醒不响，请检查以下设置：', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  _settingTip('设置 → 电池 → 小小提醒官 → 不受限制'),
+                  _settingTip('设置 → 应用管理 → 小小提醒官 → 允许自启动'),
+                  _settingTip('最近任务界面 → 锁定小小提醒官卡片'),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _sendTestNotification,
+                    icon: const Icon(Icons.notifications_active, size: 18),
+                    label: const Text('发送测试通知'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 40),
       ],
+    );
+  }
+
+  Widget _statBadge(String value, String label) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal)),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      ],
+    );
+  }
+
+  Widget _settingTip(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(color: Colors.orange)),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // 首次引导
+    if (!_settings.onboardingCompleted) {
+      return OnboardingScreen(
+        templates: AppSettings.defaultTemplates,
+        onComplete: (selected) async {
+          final next = _settings.copyWith(items: selected, onboardingCompleted: true);
+          await _saveSettings(next);
+          // 发送测试通知
+          _sendTestNotification();
+        },
+      );
+    }
+
     final pages = [
       _buildHomeTab(),
       _buildPlanTab(),
@@ -1108,44 +1321,61 @@ class _HomeScreenState extends State<HomeScreen> {
       _buildParentTab(),
     ];
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('小小提醒官'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Chip(
-              avatar: const Icon(Icons.star, color: Colors.amber, size: 18),
-              label: Text('${_settings.completedCountToday}次'),
-              backgroundColor: Colors.teal.withOpacity(0.1),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: const Text('小小提醒官'),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Chip(
+                  avatar: const Icon(Icons.star, color: Colors.amber, size: 18),
+                  label: Text('${_settings.completedCountToday}次'),
+                  backgroundColor: Colors.teal.withOpacity(0.1),
+                ),
+              ),
+            ],
+          ),
+          body: IndexedStack(index: _tabIndex, children: pages),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tabIndex,
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.home), label: '首页'),
+              NavigationDestination(icon: Icon(Icons.schedule), label: '计划'),
+              NavigationDestination(icon: Icon(Icons.mic), label: '录音'),
+              NavigationDestination(icon: Icon(Icons.family_restroom), label: '家长'),
+            ],
+            onDestinationSelected: (index) {
+              setState(() { _tabIndex = index; });
+            },
+          ),
+          floatingActionButton: _isRecording
+              ? FloatingActionButton.extended(
+                  onPressed: _stopRecording,
+                  icon: const Icon(Icons.stop),
+                  label: const Text('结束录音'),
+                )
+              : null,
+        ),
+        if (_showCelebration)
+          Container(
+            color: Colors.black38,
+            child: CelebrationOverlay(
+              onComplete: () => setState(() => _showCelebration = false),
             ),
           ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : IndexedStack(index: _tabIndex, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: '首页'),
-          NavigationDestination(icon: Icon(Icons.schedule), label: '计划'),
-          NavigationDestination(icon: Icon(Icons.mic), label: '录音'),
-          NavigationDestination(icon: Icon(Icons.family_restroom), label: '家长'),
-        ],
-        onDestinationSelected: (index) {
-          setState(() {
-            _tabIndex = index;
-          });
-        },
-      ),
-      floatingActionButton: _isRecording
-          ? FloatingActionButton.extended(
-              onPressed: _stopRecording,
-              icon: const Icon(Icons.stop),
-              label: const Text('结束录音'),
-            )
-          : null,
+      ],
     );
+  }
+
+  Future<void> _sendTestNotification() async {
+    try {
+      // 延迟 2 秒发送测试通知
+      await Future.delayed(const Duration(seconds: 2));
+      await _notificationService.sendTestNotification();
+    } catch (e) {
+      if (kDebugMode) print('测试通知发送失败: $e');
+    }
   }
 }

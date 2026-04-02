@@ -190,6 +190,19 @@ class NotificationService {
     return scheduled;
   }
 
+  Future<void> sendTestNotification() async {
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'kidreminder_test_channel', '测试通知',
+        channelDescription: '验证通知是否正常',
+        importance: Importance.high, priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      ),
+      iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+    );
+    await _plugin.show(99999, '小小提醒官', '通知功能正常！提醒会准时送达 ✓', details);
+  }
+
   Future<void> _configureLocalTimezone() async {
     tz.initializeTimeZones();
     try {

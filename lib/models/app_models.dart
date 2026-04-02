@@ -80,18 +80,51 @@ class ReminderItem {
   }
 }
 
+class Achievement {
+  const Achievement({required this.id, required this.title, required this.icon, required this.requirement, this.unlockedDate});
+  final String id;
+  final String title;
+  final String icon;
+  final String requirement;
+  final String? unlockedDate;
+  bool get isUnlocked => unlockedDate != null;
+  Achievement unlock(String date) => Achievement(id: id, title: title, icon: icon, requirement: requirement, unlockedDate: date);
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'icon': icon, 'requirement': requirement, 'unlockedDate': unlockedDate};
+  factory Achievement.fromJson(Map<String, dynamic> json) => Achievement(id: json['id'] ?? '', title: json['title'] ?? '', icon: json['icon'] ?? '⭐', requirement: json['requirement'] ?? '', unlockedDate: json['unlockedDate']);
+}
+
+class WeeklyStats {
+  const WeeklyStats({required this.dailyCounts});
+  final Map<String, int> dailyCounts;
+  int get totalWeek => dailyCounts.values.fold(0, (a, b) => a + b);
+  int get activeDays => dailyCounts.values.where((c) => c > 0).length;
+  Map<String, dynamic> toJson() => {'dailyCounts': dailyCounts};
+  factory WeeklyStats.fromJson(Map<String, dynamic> json) {
+    final raw = json['dailyCounts'];
+    final map = <String, int>{};
+    if (raw is Map) { raw.forEach((k, v) { map[k.toString()] = v is int ? v : 0; }); }
+    return WeeklyStats(dailyCounts: map);
+  }
+}
+
 class AppSettings {
   const AppSettings({
     required this.items,
     this.praiseAudioPath,
     required this.completedCountToday,
     required this.completedDate,
+    required this.onboardingCompleted,
+    required this.achievements,
+    required this.weeklyData,
   });
 
   final List<ReminderItem> items;
   final String? praiseAudioPath;
   final int completedCountToday;
   final String completedDate;
+  final bool onboardingCompleted;
+  final List<Achievement> achievements;
+  final Map<String, int> weeklyData;
 
   static String buildDateKey(DateTime dateTime) {
     final y = dateTime.year.toString();
@@ -112,6 +145,30 @@ class AppSettings {
     }
     return null;
   }
+
+  static List<Achievement> get defaultAchievements => const [
+    Achievement(id: 'first_done', title: '第一步', icon: '🌟', requirement: '完成第一次任务'),
+    Achievement(id: 'streak_3', title: '三天小达人', icon: '🔥', requirement: '连续3天完成任务'),
+    Achievement(id: 'streak_7', title: '一周小冠军', icon: '👑', requirement: '连续7天完成任务'),
+    Achievement(id: 'total_10', title: '十全十美', icon: '💪', requirement: '累计完成10次'),
+    Achievement(id: 'total_50', title: '超级宝贝', icon: '🏆', requirement: '累计完成50次'),
+    Achievement(id: 'all_tasks', title: '全能小达人', icon: '🎯', requirement: '一天内完成所有任务'),
+  ];
+
+  static List<ReminderItem> get defaultTemplates => const [
+    ReminderItem(id: 'tpl_eat', type: ReminderItemType.task, title: '该吃饭了', hour: 12, minute: 0),
+    ReminderItem(id: 'tpl_nap', type: ReminderItemType.task, title: '该午睡了', hour: 13, minute: 0),
+    ReminderItem(id: 'tpl_homework', type: ReminderItemType.task, title: '该做作业了', hour: 16, minute: 30),
+    ReminderItem(id: 'tpl_wash', type: ReminderItemType.task, title: '该洗漱了', hour: 20, minute: 0),
+    ReminderItem(id: 'tpl_sleep', type: ReminderItemType.task, title: '该睡觉了', hour: 21, minute: 0),
+    ReminderItem(id: 'tpl_water', type: ReminderItemType.task, title: '该喝水了', hour: 10, minute: 0),
+    ReminderItem(id: 'tpl_brush', type: ReminderItemType.task, title: '该刷牙了', hour: 7, minute: 30),
+    ReminderItem(id: 'tpl_exercise', type: ReminderItemType.task, title: '该运动了', hour: 17, minute: 0),
+    ReminderItem(id: 'bhv_talk', type: ReminderItemType.behavior, title: '好好说话'),
+    ReminderItem(id: 'bhv_gentle', type: ReminderItemType.behavior, title: '小手轻轻'),
+    ReminderItem(id: 'bhv_share', type: ReminderItemType.behavior, title: '学会分享'),
+    ReminderItem(id: 'bhv_patient', type: ReminderItemType.behavior, title: '耐心等待'),
+  ];
 
   factory AppSettings.defaults() {
     final now = DateTime.now();
@@ -149,6 +206,9 @@ class AppSettings {
       ],
       completedCountToday: 0,
       completedDate: date,
+      onboardingCompleted: false,
+      achievements: defaultAchievements,
+      weeklyData: const {},
     );
   }
 
@@ -158,6 +218,9 @@ class AppSettings {
     int? completedCountToday,
     String? completedDate,
     bool clearPraiseAudioPath = false,
+    bool? onboardingCompleted,
+    List<Achievement>? achievements,
+    Map<String, int>? weeklyData,
   }) {
     return AppSettings(
       items: items ?? this.items,
@@ -165,6 +228,9 @@ class AppSettings {
           clearPraiseAudioPath ? null : praiseAudioPath ?? this.praiseAudioPath,
       completedCountToday: completedCountToday ?? this.completedCountToday,
       completedDate: completedDate ?? this.completedDate,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      achievements: achievements ?? this.achievements,
+      weeklyData: weeklyData ?? this.weeklyData,
     );
   }
 
@@ -174,6 +240,9 @@ class AppSettings {
       'praiseAudioPath': praiseAudioPath,
       'completedCountToday': completedCountToday,
       'completedDate': completedDate,
+      'onboardingCompleted': onboardingCompleted,
+      'achievements': achievements.map((e) => e.toJson()).toList(),
+      'weeklyData': weeklyData,
     };
   }
 
@@ -233,11 +302,34 @@ class AppSettings {
         ? finalItems
         : [...finalItems, ...defaults.behaviorItems];
 
+    // Parse achievements
+    final parsedAchievements = <Achievement>[];
+    final rawAchievements = json['achievements'];
+    if (rawAchievements is List) {
+      for (final a in rawAchievements) {
+        if (a is Map) {
+          try {
+            parsedAchievements.add(Achievement.fromJson(Map<String, dynamic>.from(a)));
+          } catch (_) {}
+        }
+      }
+    }
+
+    // Parse weeklyData
+    final parsedWeeklyData = <String, int>{};
+    final rawWeekly = json['weeklyData'];
+    if (rawWeekly is Map) {
+      rawWeekly.forEach((k, v) { parsedWeeklyData[k.toString()] = v is int ? v : 0; });
+    }
+
     return AppSettings(
       items: mergedItems,
       praiseAudioPath: json['praiseAudioPath'] as String?,
       completedCountToday: json['completedCountToday'] as int? ?? 0,
       completedDate: json['completedDate'] as String? ?? defaults.completedDate,
+      onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
+      achievements: parsedAchievements.isEmpty ? defaults.achievements : parsedAchievements,
+      weeklyData: parsedWeeklyData,
     );
   }
 }
