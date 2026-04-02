@@ -1306,9 +1306,29 @@ class _HomeScreenState extends State<HomeScreen> {
       return OnboardingScreen(
         templates: AppSettings.defaultTemplates,
         onComplete: (selected) async {
-          final next = _settings.copyWith(items: selected, onboardingCompleted: true);
+          // 复制预置音频到本地并关联
+          final items = <ReminderItem>[];
+          for (final item in selected) {
+            final assetName = '${item.id}.mp3';
+            try {
+              final localPath = await AudioService.copyAssetAudio(assetName);
+              items.add(item.copyWith(audioPath: localPath));
+            } catch (_) {
+              items.add(item);
+            }
+          }
+          // 复制鼓励语音
+          String? praisePath;
+          try {
+            praisePath = await AudioService.copyAssetAudio('praise.mp3');
+          } catch (_) {}
+
+          final next = _settings.copyWith(
+            items: items,
+            onboardingCompleted: true,
+            praiseAudioPath: praisePath,
+          );
           await _saveSettings(next);
-          // 发送测试通知
           _sendTestNotification();
         },
       );

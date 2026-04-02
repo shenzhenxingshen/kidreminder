@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -10,6 +11,18 @@ class AudioService {
 
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
+
+  /// 将 asset 音频复制到应用文档目录，返回本地路径
+  static Future<String> copyAssetAudio(String assetName) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final localPath = p.join(dir.path, assetName);
+    final file = File(localPath);
+    if (!await file.exists()) {
+      final data = await rootBundle.load('assets/audio/$assetName');
+      await file.writeAsBytes(data.buffer.asUint8List());
+    }
+    return localPath;
+  }
 
   Future<bool> checkPermission() async {
     return _recorder.hasPermission();
