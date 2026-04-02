@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // 初始化通知服务
     try {
       await _notificationService.initialize().timeout(
-        const Duration(seconds: 3),
+        const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('初始化超时');
         },
@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('通知服务初始化失败: ${e.toString()}'),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 10),
         ),
       );
     }
@@ -137,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // 请求通知权限
     try {
       final granted = await _notificationService.requestPermissions().timeout(
-        const Duration(seconds: 3),
+        const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('权限请求超时');
         },
@@ -164,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('权限请求失败: ${e.toString()}'),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 10),
         ),
       );
     }
@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // 加载用户设置
     try {
       settings = await _storageService.loadSettings().timeout(
-        const Duration(seconds: 3),
+        const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('加载设置超时');
         },
@@ -187,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // 调度通知
     try {
       await _notificationService.scheduleForSettings(settings).timeout(
-        const Duration(seconds: 3),
+        const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('调度通知超时');
         },
@@ -200,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('提醒调度失败: ${e.toString()}'),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 10),
         ),
       );
     }

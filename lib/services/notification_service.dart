@@ -209,10 +209,7 @@ class NotificationService {
       final name = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(name));
     } catch (_) {
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print('时区初始化失败，使用默认本地时区');
-      }
+      tz.setLocalLocation(tz.getLocation('Asia/Shanghai'));
     }
   }
 }
